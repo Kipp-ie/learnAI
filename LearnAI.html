@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Samenvatting Overhoor App</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #ECEFF1; /* ft.Colors.BLUE_GREY_50 */
+        }
+        /* Custom spinner animation for loading indicator */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col items-center space-y-6">
+        <h1 class="text-4xl font-extrabold text-gray-900 text-center">Samenvatting Overhoor App</h1>
+        <p class="text-lg text-gray-600 text-center max-w-prose">
+            Plak je samenvatting hieronder, voer je Gemini API-sleutel in, en laat de AI je overhoren met meerkeuzevragen.
+        </p>
+        <div class="w-full h-px bg-gray-200"></div>
+
+        <!-- API Key Input -->
+        <div class="w-full">
+            <label for="apiKeyInput" class="block text-sm font-medium text-gray-700 mb-1">Jouw Gemini API-sleutel:</label>
+            <input type="password" id="apiKeyInput" placeholder="Voer hier je Gemini API-sleutel in"
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 shadow-sm">
+            <p class="mt-1 text-sm text-gray-500">Deze sleutel wordt alleen lokaal in je browser gebruikt.</p>
+        </div>
+
+        <!-- Summary Input -->
+        <div class="w-full">
+            <label for="summaryInput" class="block text-sm font-medium text-gray-700 mb-1">Plak hier je samenvatting:</label>
+            <textarea id="summaryInput" placeholder="Type of plak hier de tekst die je wilt overhoren (bijv. aantekeningen, een hoofdstuk)."
+                      rows="10"
+                      class="w-full p-4 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 shadow-sm resize-y min-h-[160px]"></textarea>
+        </div>
+
+        <!-- Controls and Status -->
+        <div class="flex items-center space-x-4">
+            <button id="generateQuizBtn"
+                    class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-xl shadow-md transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-75 flex items-center justify-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                <span>Onderwerpen Overhoren</span>
+            </button>
+            <div id="loadingIndicator" class="hidden w-8 h-8 border-4 border-t-4 border-gray-200 border-t-orange-500 rounded-full animate-spin-slow"></div>
+        </div>
+        <p id="statusMessage" class="text-red-600 font-semibold text-center"></p>
+
+        <div class="w-full h-px bg-gray-200"></div>
+
+        <!-- Quiz Questions Area -->
+        <div id="quizArea" class="w-full flex flex-col items-center space-y-4 hidden">
+            <h2 class="text-3xl font-bold text-gray-800 mt-4">Quiz Vragen</h2>
+            <!-- Questions will be injected here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        const summaryInput = document.getElementById('summaryInput');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const generateQuizBtn = document.getElementById('generateQuizBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const statusMessage = document.getElementById('statusMessage');
+        const quizArea = document.getElementById('quizArea');
+
+        // Gemini API configuration
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+
+        // Function to check if an answer is correct and provide feedback
+        function checkAnswer(selectedRadio, correctAnswer, feedbackElement) {
+            const selectedAnswer = selectedRadio.value;
+            if (selectedAnswer === correctAnswer) {
+                feedbackElement.textContent = `Correct! '${correctAnswer}'`;
+                feedbackElement.className = 'text-green-700 font-bold mt-2';
+            } else {
+                feedbackElement.textContent = `Niet correct. Het juiste antwoord was: '${correctAnswer}'`;
+                feedbackElement.className = 'text-red-700 font-bold mt-2';
+            }
+        }
+
+        // Function to generate quiz questions
+        generateQuizBtn.addEventListener('click', async () => {
+            const summaryText = summaryInput.value.trim();
+            const apiKey = apiKeyInput.value.trim();
+
+            if (!summaryText) {
+                statusMessage.textContent = "Plak eerst een samenvatting in het tekstveld voordat u vragen genereert.";
+                return;
+            }
+
+            if (!apiKey) {
+                statusMessage.textContent = "Voer uw Gemini API-sleutel in.";
+                return;
+            }
+
+            // Reset status and show loading indicator
+            statusMessage.textContent = "";
+            loadingIndicator.classList.remove('hidden');
+            quizArea.classList.add('hidden');
+            quizArea.innerHTML = '<h2 class="text-3xl font-bold text-gray-800 mt-4">Quiz Vragen</h2>'; // Clear previous questions
+
+            // Prompt for the Gemini API to generate multiple-choice questions in a specific JSON format
+            const prompt = `
+                Creëer een passend aantal meerkeuzevragen (minimaal 3, maximaal 20 vragen) die alle belangrijke onderwerpen uit de volgende samenvatting dekken.
+                Elke vraag moet het juiste antwoord en 3 onjuiste antwoorden bevatten.
+                Geef de uitvoer op in een strikt JSON-formaat, met een array van objecten, waarbij elk object een 'vraag' (string),
+                een array 'antwoorden' (van strings, inclusief alle 4 opties) en 'correct_antwoord' (string) bevat.
+                Zorg ervoor dat het JSON-formaat correct is en gemakkelijk kan worden geparset.
+                Samenvatting: \n\n${summaryText}
+            `;
+
+            const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+
+            const payload = {
+                contents: chatHistory,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                "vraag": { "type": "STRING" },
+                                "antwoorden": {
+                                    "type": "ARRAY",
+                                    "items": { "type": "STRING" }
+                                },
+                                "correct_antwoord": { "type": "STRING" }
+                            },
+                            "propertyOrdering": ["vraag", "antwoorden", "correct_antwoord"]
+                        }
+                    }
+                }
+            };
+
+            try {
+                const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API-fout: ${response.status} ${response.statusText} - ${errorData.error.message || 'Onbekende fout'}`);
+                }
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    let rawJsonStr = result.candidates[0].content.parts[0].text;
+
+                    // Remove markdown code block if present
+                    if (rawJsonStr.startsWith("```json") && rawJsonStr.endsWith("```")) {
+                        rawJsonStr = rawJsonStr.substring(7, rawJsonStr.length - 3).trim();
+                    }
+
+                    const parsedQuiz = JSON.parse(rawJsonStr);
+
+                    // Add questions to the quiz area
+                    parsedQuiz.forEach((qData, index) => {
+                        const questionText = qData.vraag || "Geen vraag gevonden";
+                        const answers = qData.antwoorden || [];
+                        const correctAnswer = qData.correct_antwoord || "";
+
+                        const questionCard = document.createElement('div');
+                        questionCard.className = 'bg-white p-6 rounded-xl shadow-lg w-full max-w-xl border border-gray-100'; // Card styling
+
+                        const questionTitle = document.createElement('p');
+                        questionTitle.className = 'text-xl font-semibold text-gray-800 mb-3';
+                        questionTitle.textContent = `Vraag ${index + 1}: ${questionText}`;
+                        questionCard.appendChild(questionTitle);
+
+                        const divider = document.createElement('div');
+                        divider.className = 'h-px bg-gray-200 my-3';
+                        questionCard.appendChild(divider);
+
+                        const radioGroup = document.createElement('div');
+                        radioGroup.className = 'space-y-2 mb-3';
+
+                        const feedbackElement = document.createElement('p');
+                        feedbackElement.className = 'text-gray-700 font-bold mt-2'; // Initial feedback text
+
+                        answers.forEach(ans => {
+                            const label = document.createElement('label');
+                            label.className = 'flex items-center space-x-2 cursor-pointer p-2 rounded-md hover:bg-orange-50 transition duration-150 ease-in-out';
+
+                            const radio = document.createElement('input');
+                            radio.type = 'radio';
+                            radio.name = `question_${index}`; // Group radio buttons by question
+                            radio.value = ans;
+                            radio.className = 'form-radio h-5 w-5 text-orange-600 focus:ring-orange-500'; // Orange radio button
+
+                            label.appendChild(radio);
+                            label.appendChild(document.createTextNode(ans));
+                            radioGroup.appendChild(label);
+
+                            // Add event listener to check answer when selected
+                            radio.addEventListener('change', () => {
+                                checkAnswer(radio, correctAnswer, feedbackElement);
+                            });
+                        });
+                        questionCard.appendChild(radioGroup);
+                        questionCard.appendChild(feedbackElement); // Add feedback element to card
+
+                        quizArea.appendChild(questionCard);
+                    });
+
+                    quizArea.classList.remove('hidden'); // Show the quiz area
+                } else {
+                    statusMessage.textContent = "Kon geen quizvragen genereren. De API gaf een onverwacht antwoord of genereerde geen inhoud.";
+                }
+
+            } catch (error) {
+                console.error("Fout bij het genereren van quizvragen:", error);
+                statusMessage.textContent = `Fout: ${error.message}. Controleer je API-sleutel en de samenvatting.`;
+            } finally {
+                loadingIndicator.classList.add('hidden'); // Hide loading indicator
+            }
+        });
+    </script>
+</body>
+</html>
