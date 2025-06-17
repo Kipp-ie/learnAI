@@ -114,7 +114,7 @@
 
             // Prompt for the Gemini API to generate multiple-choice questions in a specific JSON format
             const prompt = `
-                Creëer een passend aantal meerkeuzevragen (minimaal 3) die alle belangrijke onderwerpen uit de volgende samenvatting dekken.
+                Creëer een passend aantal meerkeuzevragen (minimaal 3) die alle belangrijke onderwerpen uit de volgende samenvatting dekken. Liever teveel vragen dan te weinig, de gebruiker moet compleet getoetst worden.
                 Elke vraag moet het juiste antwoord en 3 onjuiste antwoorden bevatten.
                 Geef de uitvoer op in een strikt JSON-formaat, met een array van objecten, waarbij elk object een 'vraag' (string),
                 een array 'antwoorden' (van strings, inclusief alle 4 opties) en 'correct_antwoord' (string) bevat.
